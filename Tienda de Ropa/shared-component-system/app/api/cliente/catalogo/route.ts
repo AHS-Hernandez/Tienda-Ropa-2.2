@@ -22,6 +22,7 @@ export async function GET(request: Request) {
       categoria,
       busqueda,
       incluirCosto: canSeeCosto(session),
+      soloDisponibles: true,
     })
 
     const sanitized = productos.map((p) => {

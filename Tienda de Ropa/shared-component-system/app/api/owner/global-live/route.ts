@@ -7,10 +7,12 @@ import {
   getRedEmpleadosGlobal,
   getRedStockSedeTiempoReal,
   getRedVentasHoyGlobal,
+  getRedVentasGlobal,
+  type RedTiempoRealBlock,
 } from "@/lib/data/red-tiempo-real"
 import { getSqlErrorMessage } from "@/lib/db/errors"
 
-function pack(block: Awaited<ReturnType<typeof getRedVentasHoyGlobal>>) {
+function pack(block: RedTiempoRealBlock) {
   return {
     rows: sanitizeRows(block.rows),
     error: block.error,
@@ -21,16 +23,36 @@ function pack(block: Awaited<ReturnType<typeof getRedVentasHoyGlobal>>) {
   }
 }
 
+// Si una consulta individual falla (timeout, error), se devuelve un bloque
+// vacio con el error para que las demas se sigan mostrando. Antes usabamos
+// Promise.all y un solo timeout tumbaba toda la pagina.
+async function safe(
+  loader: () => Promise<RedTiempoRealBlock>
+): Promise<RedTiempoRealBlock> {
+  try {
+    return await loader()
+  } catch (err) {
+    return {
+      rows: [],
+      error: getSqlErrorMessage(err),
+      warning: null,
+      linkedError: getSqlErrorMessage(err),
+      source: "local",
+    }
+  }
+}
+
 export async function GET() {
   try {
     const session = await requireApiSession(["admin-global"])
     if (sessionIsResponse(session)) return session
 
-    const [ventas, empleados, clientes, stock] = await Promise.all([
-      getRedVentasHoyGlobal(),
-      getRedEmpleadosGlobal(),
-      getRedClientesGlobal(),
-      getRedStockSedeTiempoReal(),
+    const [ventas, ventasGlobal, empleados, clientes, stock] = await Promise.all([
+      safe(getRedVentasHoyGlobal),
+      safe(getRedVentasGlobal),
+      safe(getRedEmpleadosGlobal),
+      safe(getRedClientesGlobal),
+      safe(getRedStockSedeTiempoReal),
     ])
 
     const blocks = [ventas, empleados, clientes, stock]
@@ -54,6 +76,7 @@ export async function GET() {
         ? `SSMS suele usar otro login; la app usa ${dbUser}@${dbServer}. Ejecute SQL/SQL-Grant-LinkedServer-login_nivel4.sql en master.`
         : null,
       ventas: pack(ventas),
+      ventasGlobal: pack(ventasGlobal),
       empleados: pack(empleados),
       clientes: pack(clientes),
       stock: pack(stock),

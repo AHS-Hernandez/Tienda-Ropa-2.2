@@ -16,6 +16,8 @@ import {
   ClipboardList,
   Warehouse,
   Radio,
+  Star,
+  ShieldAlert,
   type LucideIcon,
 } from "lucide-react"
 
@@ -38,12 +40,14 @@ export const navigationByRole: Record<UserRole, NavItem[]> = {
   ],
   vendedor: [
     { title: "POS", href: "/vendedor/pos", icon: CreditCard },
+    { title: "Catálogo", href: "/vendedor/catalogo", icon: ShoppingBag },
     { title: "Clientes", href: "/vendedor/clientes", icon: Users },
     { title: "Ventas del Día", href: "/vendedor/ventas", icon: BarChart3 },
     { title: "Stock", href: "/vendedor/stock", icon: Package },
   ],
   "admin-sede": [
     { title: "Dashboard", href: "/admin-sede/dashboard", icon: Home },
+    { title: "Catálogo", href: "/admin-sede/catalogo", icon: ShoppingBag },
     { title: "Inventario", href: "/admin-sede/inventario", icon: Package },
     { title: "Empleados", href: "/admin-sede/empleados", icon: Users },
     { title: "Usuarios", href: "/admin-sede/usuarios", icon: User },
@@ -55,9 +59,11 @@ export const navigationByRole: Record<UserRole, NavItem[]> = {
     { title: "Red en vivo", href: "/owner/red-tiempo-real", icon: Radio },
     { title: "Sedes", href: "/owner/sedes", icon: Building2 },
     { title: "Stock Central", href: "/owner/stock", icon: Warehouse },
+    { title: "Umbrales de Stock", href: "/owner/umbrales", icon: ShieldAlert },
     { title: "Compras", href: "/owner/compras", icon: Truck },
     { title: "Marketing", href: "/owner/marketing", icon: Megaphone },
     { title: "Catálogo Maestro", href: "/owner/catalogo-maestro", icon: BookOpen },
+    { title: "Reseñas", href: "/owner/resenas", icon: Star },
     { title: "Empleados", href: "/owner/empleados", icon: Users },
     { title: "Usuarios Globales", href: "/owner/usuarios", icon: User },
     { title: "Bitácora", href: "/owner/bitacora", icon: ClipboardList },

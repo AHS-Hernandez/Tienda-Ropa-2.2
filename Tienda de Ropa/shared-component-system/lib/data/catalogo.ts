@@ -1,4 +1,5 @@
 import { queryRows } from "@/lib/db/query"
+import { getFotosProductosBatch, getFotosProducto } from "@/lib/data/fotos"
 
 export interface ProductoCatalogoRow {
   id_producto: number
@@ -14,11 +15,12 @@ export interface ProductoCatalogoRow {
   stock: number
   precio_final: number | null
   promocion: string | null
+  fotos: string[]
 }
 
 export async function getCatalogoProductos(
   idSede: number,
-  options?: { categoria?: string; busqueda?: string; incluirCosto?: boolean }
+  options?: { categoria?: string; busqueda?: string; incluirCosto?: boolean; soloDisponibles?: boolean }
 ): Promise<ProductoCatalogoRow[]> {
   const costoCol = options?.incluirCosto ? "c.Precio_costo AS precio_costo," : ""
 
@@ -58,25 +60,35 @@ export async function getCatalogoProductos(
     )`
     params.busqueda = `%${options.busqueda}%`
   }
+  if (options?.soloDisponibles) {
+    sqlText += ` AND ISNULL(s.Cantidad_Disponible, 0) > 0`
+  }
 
   sqlText += ` ORDER BY c.Nombre`
 
   const rows = await queryRows<Record<string, unknown>>(sqlText, params)
-  return rows.map((r) => ({
-    id_producto: Number(r.id_producto),
-    nombre: String(r.nombre),
-    descripcion: r.descripcion != null ? String(r.descripcion) : null,
-    marca: r.marca != null ? String(r.marca) : null,
-    color: r.color != null ? String(r.color) : null,
-    talla: r.talla != null ? String(r.talla) : null,
-    precio_venta: Number(r.precio_venta),
-    precio_costo: r.precio_costo != null ? Number(r.precio_costo) : undefined,
-    subcategoria: String(r.subcategoria),
-    categoria: String(r.categoria),
-    stock: Number(r.stock),
-    precio_final: r.precio_final != null ? Number(r.precio_final) : null,
-    promocion: r.promocion != null ? String(r.promocion) : null,
-  }))
+  const ids = rows.map((r) => Number(r.id_producto))
+  const fotosMap = await getFotosProductosBatch(ids)
+
+  return rows.map((r) => {
+    const id = Number(r.id_producto)
+    return {
+      id_producto: id,
+      nombre: String(r.nombre),
+      descripcion: r.descripcion != null ? String(r.descripcion) : null,
+      marca: r.marca != null ? String(r.marca) : null,
+      color: r.color != null ? String(r.color) : null,
+      talla: r.talla != null ? String(r.talla) : null,
+      precio_venta: Number(r.precio_venta),
+      precio_costo: r.precio_costo != null ? Number(r.precio_costo) : undefined,
+      subcategoria: String(r.subcategoria),
+      categoria: String(r.categoria),
+      stock: Number(r.stock),
+      precio_final: r.precio_final != null ? Number(r.precio_final) : null,
+      promocion: r.promocion != null ? String(r.promocion) : null,
+      fotos: fotosMap[id] ?? [],
+    }
+  })
 }
 
 export async function getCategorias(): Promise<{ id_categoria: number; nombre: string }[]> {
@@ -84,4 +96,51 @@ export async function getCategorias(): Promise<{ id_categoria: number; nombre: s
     `SELECT id_categoria, Nombre FROM Producto.vw_Listado_Categorias ORDER BY Nombre`
   )
   return rows.map((r) => ({ id_categoria: r.id_categoria, nombre: r.Nombre }))
+}
+
+export async function getProductoById(
+  idProducto: number,
+  idSede: number
+): Promise<ProductoCatalogoRow | null> {
+  const rows = await queryRows<Record<string, unknown>>(
+    `SELECT
+      c.id_producto,
+      c.Nombre        AS nombre,
+      c.Descripcion   AS descripcion,
+      c.Marca         AS marca,
+      c.Color         AS color,
+      c.Talla         AS talla,
+      c.Precio_venta  AS precio_venta,
+      c.Subcategoria  AS subcategoria,
+      c.Categoria     AS categoria,
+      ISNULL(s.Cantidad_Disponible, 0) AS stock,
+      vo.Precio_Final_Oferta  AS precio_final,
+      vo.Promocion_Vigente    AS promocion
+     FROM Producto.vw_Catalogo_Maestro c
+     LEFT JOIN Inventario.vw_Disponibilidad_Stock s
+       ON s.id_producto = c.id_producto AND s.id_sede = @id_sede
+     LEFT JOIN Marketing.vw_Validacion_Precios_Oferta vo
+       ON vo.id_producto = c.id_producto
+     WHERE c.id_producto = @id_producto`,
+    { id_producto: idProducto, id_sede: idSede }
+  )
+  if (!rows.length) return null
+  const r = rows[0]
+  const id = Number(r.id_producto)
+  const fotos = await getFotosProducto(id)
+  return {
+    id_producto: id,
+    nombre: String(r.nombre),
+    descripcion: r.descripcion != null ? String(r.descripcion) : null,
+    marca: r.marca != null ? String(r.marca) : null,
+    color: r.color != null ? String(r.color) : null,
+    talla: r.talla != null ? String(r.talla) : null,
+    precio_venta: Number(r.precio_venta),
+    subcategoria: String(r.subcategoria),
+    categoria: String(r.categoria),
+    stock: Number(r.stock),
+    precio_final: r.precio_final != null ? Number(r.precio_final) : null,
+    promocion: r.promocion != null ? String(r.promocion) : null,
+    fotos,
+  }
 }

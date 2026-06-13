@@ -22,6 +22,10 @@ function getConfig(): sql.config {
     database,
     user,
     password,
+    // 60s: las vistas globales via linked server pueden ser lentas.
+    // El default del driver mssql es 15s, demasiado ajustado.
+    requestTimeout: 60_000,
+    connectionTimeout: 15_000,
     options: {
       encrypt: process.env.DB_ENCRYPT !== "false",
       trustServerCertificate: process.env.DB_TRUST_CERT === "true",

@@ -1,3 +1,11 @@
+-- ================================================================
+-- sp_Procesar_Cola_Replicacion
+-- ================================================================
+-- Requisito previo: agregar columna intentos si no existe:
+--   ALTER TABLE Configuracion.Cola_Replicacion
+--     ADD intentos TINYINT NOT NULL DEFAULT 0;
+-- ================================================================
+
 USE TiendaRopa;
 GO
 
@@ -6,16 +14,20 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @id      INT,
-            @tabla   VARCHAR(100),
-            @op      CHAR(1),
-            @payload NVARCHAR(MAX);
+    DECLARE @id       INT,
+            @tabla    VARCHAR(100),
+            @op       CHAR(1),
+            @payload  NVARCHAR(MAX),
+            @intentos TINYINT;
 
+    -- Solo tomar filas que no estén procesadas y que no hayan
+    -- superado el máximo de reintentos (3).
     SELECT TOP 1
         @id = id_cola, @tabla = tabla,
-        @op = operacion, @payload = payload
+        @op = operacion, @payload = payload,
+        @intentos = intentos
     FROM Configuracion.Cola_Replicacion
-    WHERE procesado = 0
+    WHERE procesado = 0 AND intentos < 3
     ORDER BY id_cola;
 
     WHILE @id IS NOT NULL
@@ -145,24 +157,97 @@ BEGIN
                 DELETE FROM SEDE.TiendaRopa.Marketing.Promocion_Aplicacion
                 WHERE id_aplicacion IN (SELECT id_aplicacion FROM OPENJSON(@payload) WITH (id_aplicacion INT));
 
+            -- ------------------------------------------------
+            -- Inventario.Stock_Umbral  ← NUEVO
+            -- ------------------------------------------------
+
+            -- id_umbral es IDENTITY en Sede.
+            -- Se usa EXEC...AT para evitar que OLE DB intente mapear la columna
+            -- IDENTITY en el INSERT (error MSOLEDBSQL19 "could not INSERT because
+            -- of column id_umbral"). Con EXEC AT el SQL viaja como texto nativo
+            -- y Sede lo ejecuta localmente sin el mapeo de columnas del proveedor.
+            IF @tabla = 'Inventario.Stock_Umbral' AND @op = 'I'
+            BEGIN
+                DECLARE @sub_i INT, @sede_i INT, @min_i INT, @fecha_i DATETIME;
+                SELECT @sub_i   = id_subcategoria,
+                       @sede_i  = id_sede,
+                       @min_i   = Stock_minimo,
+                       @fecha_i = Fecha_registro
+                FROM OPENJSON(@payload) WITH (
+                    id_subcategoria INT,
+                    id_sede         INT,
+                    Stock_minimo    INT,
+                    Fecha_registro  DATETIME);
+
+                DECLARE @sqlUmbral NVARCHAR(2000);
+                SET @sqlUmbral = N'
+                    IF EXISTS (SELECT 1 FROM Inventario.Stock_Umbral
+                               WHERE id_subcategoria = ' + CAST(@sub_i AS NVARCHAR) + '
+                                 AND id_sede = ' + CAST(@sede_i AS NVARCHAR) + ')
+                        UPDATE Inventario.Stock_Umbral
+                           SET Stock_minimo = ' + CAST(@min_i AS NVARCHAR) + ',
+                               Fecha_registro = ''' + CONVERT(NVARCHAR(30), @fecha_i, 120) + '''
+                         WHERE id_subcategoria = ' + CAST(@sub_i AS NVARCHAR) + '
+                           AND id_sede = ' + CAST(@sede_i AS NVARCHAR) + '
+                    ELSE
+                        INSERT INTO Inventario.Stock_Umbral
+                            (id_subcategoria, id_sede, Stock_minimo, Fecha_registro)
+                        VALUES (' + CAST(@sub_i AS NVARCHAR) + ', '
+                                  + CAST(@sede_i AS NVARCHAR) + ', '
+                                  + CAST(@min_i AS NVARCHAR) + ', '''
+                                  + CONVERT(NVARCHAR(30), @fecha_i, 120) + ''')';
+                EXEC (@sqlUmbral) AT SEDE;
+            END
+
+            IF @tabla = 'Inventario.Stock_Umbral' AND @op = 'U'
+                UPDATE s SET
+                    s.Stock_minimo   = j.Stock_minimo,
+                    s.Fecha_registro = j.Fecha_registro
+                FROM SEDE.TiendaRopa.Inventario.Stock_Umbral s
+                JOIN (SELECT id_subcategoria, id_sede, Stock_minimo, Fecha_registro
+                      FROM OPENJSON(@payload) WITH (
+                          id_subcategoria INT,
+                          id_sede         INT,
+                          Stock_minimo    INT,
+                          Fecha_registro  DATETIME)) j
+                  ON s.id_subcategoria = j.id_subcategoria AND s.id_sede = j.id_sede;
+
+            IF @tabla = 'Inventario.Stock_Umbral' AND @op = 'D'
+                DELETE s
+                FROM SEDE.TiendaRopa.Inventario.Stock_Umbral s
+                JOIN (SELECT id_subcategoria, id_sede
+                      FROM OPENJSON(@payload) WITH (
+                          id_subcategoria INT,
+                          id_sede         INT)) j
+                  ON s.id_subcategoria = j.id_subcategoria AND s.id_sede = j.id_sede;
+
+            -- ------------------------------------------------
             -- Marcar procesado
+            -- ------------------------------------------------
             UPDATE Configuracion.Cola_Replicacion
             SET procesado = 1, fecha_procesado = GETDATE()
             WHERE id_cola = @id;
 
         END TRY
         BEGIN CATCH
+            -- Incrementar intentos y guardar el último error.
+            -- Si ya llegó a 3 intentos → marcar procesado=1 (descartado).
+            -- Si no → dejar procesado=0 para que el Job lo reintente.
             UPDATE Configuracion.Cola_Replicacion
-            SET error = LEFT(ERROR_MESSAGE(), 500)
+            SET intentos        = intentos + 1,
+                error           = LEFT(ERROR_MESSAGE(), 500),
+                procesado       = CASE WHEN intentos + 1 >= 3 THEN 1 ELSE 0 END,
+                fecha_procesado = CASE WHEN intentos + 1 >= 3 THEN GETDATE() ELSE NULL END
             WHERE id_cola = @id;
         END CATCH
 
-        SET @id = NULL;
+        SET @id = NULL; SET @intentos = NULL;
         SELECT TOP 1
             @id = id_cola, @tabla = tabla,
-            @op = operacion, @payload = payload
+            @op = operacion, @payload = payload,
+            @intentos = intentos
         FROM Configuracion.Cola_Replicacion
-        WHERE procesado = 0
+        WHERE procesado = 0 AND intentos < 3
         ORDER BY id_cola;
     END
 END;

@@ -1,21 +1,21 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { ProductRow } from "@/components/erp/product-row"
-import { PageToolbar } from "@/components/erp/page-toolbar"
-import { Button } from "@/components/ui/button"
-import { Loader2 } from "lucide-react"
-import type { ProductoCatalogoRow } from "@/lib/data/catalogo"
 import Link from "next/link"
+import { Loader2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { ProductCard } from "@/components/erp/product-card"
+import { useTrackEvent } from "@/hooks/use-track-event"
+import type { ProductoCatalogoRow } from "@/lib/data/catalogo"
 
 export default function ClienteCatalogoPage() {
+  const track = useTrackEvent()
   const [productos, setProductos] = useState<ProductoCatalogoRow[]>([])
   const [categorias, setCategorias] = useState<{ id_categoria: number; nombre: string }[]>([])
-  const [categoria, setCategoria] = useState<string>("")
+  const [categoria, setCategoria] = useState("")
   const [busqueda, setBusqueda] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [addingId, setAddingId] = useState<number | null>(null)
   const [cartMsg, setCartMsg] = useState<string | null>(null)
 
   const load = useCallback(async () => {
@@ -29,12 +29,16 @@ export default function ClienteCatalogoPage() {
       const data = await res.json()
       if (!data.ok) throw new Error(data.message)
       setProductos(data.productos)
+
+      if (busqueda) {
+        track({ tipo: "busqueda", termino_busqueda: busqueda })
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al cargar catálogo")
     } finally {
       setLoading(false)
     }
-  }, [categoria, busqueda])
+  }, [categoria, busqueda, track])
 
   useEffect(() => {
     fetch("/api/cliente/catalogo?categorias=1")
@@ -47,24 +51,20 @@ export default function ClienteCatalogoPage() {
     return () => clearTimeout(t)
   }, [load])
 
-  const addToCart = async (idProducto: number, cantidad: number) => {
-    setAddingId(idProducto)
+  const addToCart = async (idProducto: number) => {
     try {
       const res = await fetch("/api/cliente/carrito", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "add", id_producto: idProducto, cantidad }),
+        body: JSON.stringify({ action: "add", id_producto: idProducto, cantidad: 1 }),
       })
       const data = await res.json()
       if (!data.ok) throw new Error(data.message)
       setCartMsg(data.message ?? "Agregado al carrito")
       setTimeout(() => setCartMsg(null), 3000)
+      track({ tipo: "agregar_carrito", id_producto: idProducto })
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "No se pudo agregar"
-      setCartMsg(msg)
-      alert(msg)
-    } finally {
-      setAddingId(null)
+      alert(e instanceof Error ? e.message : "No se pudo agregar")
     }
   }
 
@@ -74,7 +74,7 @@ export default function ClienteCatalogoPage() {
         <div>
           <h1 className="text-2xl font-bold">Catálogo</h1>
           <p className="text-sm text-muted-foreground">
-            Producto.vw_Catalogo_Maestro + stock y ofertas vigentes
+            {productos.length} producto{productos.length !== 1 ? "s" : ""}
           </p>
         </div>
         <Link href="/cliente/carrito">
@@ -82,19 +82,17 @@ export default function ClienteCatalogoPage() {
         </Link>
       </div>
 
-      <PageToolbar
-        search={busqueda}
-        onSearchChange={setBusqueda}
-        searchPlaceholder="Nombre, marca, color o categoría…"
-        searchHint="Escriba al menos una letra. Use la cantidad y Agregar (o pulse varias veces). Ej.: camisa, nike"
+      {/* Buscador */}
+      <input
+        value={busqueda}
+        onChange={(e) => setBusqueda(e.target.value)}
+        placeholder="Nombre, marca, color o categoría…"
+        className="w-full rounded-xl border border-border bg-background px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-primary/40"
       />
 
+      {/* Filtros de categoría */}
       <div className="flex flex-wrap gap-2">
-        <Button
-          size="sm"
-          variant={categoria === "" ? "default" : "outline"}
-          onClick={() => setCategoria("")}
-        >
+        <Button size="sm" variant={categoria === "" ? "default" : "outline"} onClick={() => setCategoria("")}>
           Todas
         </Button>
         {categorias.map((c) => (
@@ -109,12 +107,13 @@ export default function ClienteCatalogoPage() {
         ))}
       </div>
 
-      {error && (
-        <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">{error}</p>
-      )}
+      {error && <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">{error}</p>}
       {cartMsg && (
-        <p className="text-sm text-brand-700 bg-brand-50 dark:bg-brand-950/30 rounded-lg px-3 py-2">
-          {cartMsg} — <Link href="/cliente/carrito" className="underline font-medium">Ver carrito</Link>
+        <p className="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-700 dark:bg-brand-950/30">
+          {cartMsg} —{" "}
+          <Link href="/cliente/carrito" className="font-medium underline">
+            Ver carrito
+          </Link>
         </p>
       )}
 
@@ -122,19 +121,19 @@ export default function ClienteCatalogoPage() {
         <div className="flex justify-center py-16">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
+      ) : productos.length === 0 ? (
+        <p className="py-12 text-center text-muted-foreground">Sin productos</p>
       ) : (
-        <div className="grid gap-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {productos.map((p) => (
-            <ProductRow
+            <ProductCard
               key={p.id_producto}
-              product={p}
-              onAdd={addToCart}
-              adding={addingId === p.id_producto}
+              producto={p}
+              href={`/cliente/catalogo/${p.id_producto}`}
+              onAgregar={addToCart}
+              hideStock
             />
           ))}
-          {productos.length === 0 && !error && (
-            <p className="text-center text-muted-foreground py-12">Sin productos</p>
-          )}
         </div>
       )}
     </div>

@@ -143,43 +143,37 @@ export function TopBar({
           <Search className="h-5 w-5" />
         </Button>
 
-        {showStockAlerts && (
+        {showStockAlerts && notifications.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="relative h-9 w-9 p-0">
-                <Bell className="h-5 w-5" />
-                {unreadCount > 0 && (
-                  <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium text-primary-foreground">
-                    {unreadCount}
-                  </span>
-                )}
+                <Bell className="h-5 w-5 text-amber-500" />
+                <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
+                  {notifications.length}
+                </span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-80">
               <DropdownMenuLabel className="flex items-center justify-between">
                 Alertas de stock
-                {unreadCount > 0 && (
-                  <span className="text-xs font-normal text-muted-foreground">
-                    {unreadCount} sin leer
-                  </span>
-                )}
+                <span className="text-xs font-normal text-muted-foreground">
+                  {notifications.length} producto{notifications.length !== 1 ? "s" : ""} bajo umbral
+                </span>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {notifications.length === 0 ? (
-                <DropdownMenuItem disabled>Sin alertas de stock</DropdownMenuItem>
-              ) : (
-                notifications.map((notification) => (
-                  <DropdownMenuItem
-                    key={notification.id}
-                    className="flex flex-col items-start gap-1 p-3"
-                  >
-                    <span className="font-medium text-sm">{notification.title}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {notification.message}
-                    </span>
-                  </DropdownMenuItem>
-                ))
-              )}
+              {notifications.map((notification) => (
+                <DropdownMenuItem
+                  key={notification.id}
+                  className="flex flex-col items-start gap-1 p-3"
+                >
+                  <span className={`font-medium text-sm ${notification.title === "Sin stock" ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"}`}>
+                    {notification.title}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {notification.message}
+                  </span>
+                </DropdownMenuItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
         )}

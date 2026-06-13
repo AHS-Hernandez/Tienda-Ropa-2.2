@@ -25,7 +25,8 @@ import {
 import type { ProductoCatalogoRow } from "@/lib/data/catalogo"
 import { fetchJson } from "@/lib/api/fetch-json"
 import { rowField, rowStr } from "@/lib/api/row-field"
-import { Loader2, Plus, Pencil } from "lucide-react"
+import { Loader2, Plus, Pencil, Camera } from "lucide-react"
+import Link from "next/link"
 
 export default function OwnerCatalogoPage() {
   const [productos, setProductos] = useState<ProductoCatalogoRow[]>([])
@@ -344,6 +345,11 @@ export default function OwnerCatalogoPage() {
                     }}
                   >
                     <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`/owner/catalogo-maestro/${p.id_producto}`}>
+                      <Camera className="h-4 w-4" />
+                    </Link>
                   </Button>
                 </div>
               ))}
