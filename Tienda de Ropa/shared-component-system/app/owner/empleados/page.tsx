@@ -3,11 +3,17 @@
 import { useCallback, useEffect, useState } from "react"
 import { DataTableView } from "@/components/erp/data-table-view"
 import { ModernTable, type Column } from "@/components/tables/modern-table"
-import { PageToolbar } from "@/components/erp/page-toolbar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
@@ -31,9 +37,10 @@ const emptyContratar = {
   crear_usuario: false,
   username: "",
   password: "",
+  nivel_acceso: "2",
 }
 
-export default function AdminEmpleadosPage() {
+export default function OwnerEmpleadosPage() {
   const [directorio, setDirectorio] = useState<Record<string, unknown>[]>([])
   const [listLoading, setListLoading] = useState(true)
   const [listError, setListError] = useState<string | null>(null)
@@ -50,7 +57,7 @@ export default function AdminEmpleadosPage() {
     setListLoading(true)
     setListError(null)
     fetchJson<{ ok: boolean; empleados?: Record<string, unknown>[]; message?: string }>(
-      "/api/admin-sede/empleados"
+      "/api/owner/empleados"
     )
       .then((d) => {
         if (!d.ok) throw new Error(d.message ?? "Error al cargar empleados")
@@ -70,7 +77,7 @@ export default function AdminEmpleadosPage() {
     setSaving(true)
     try {
       const data = await fetchJson<{ ok: boolean; message?: string }>(
-        "/api/admin-sede/empleados",
+        "/api/owner/empleados",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -99,12 +106,12 @@ export default function AdminEmpleadosPage() {
         crear_usuario: contratarForm.crear_usuario,
         username: contratarForm.username,
         password: contratarForm.password,
-        nivel_acceso: 2,
+        nivel_acceso: Number(contratarForm.nivel_acceso),
       })
       setOpenContratar(false)
       setContratarForm(emptyContratar)
       loadDirectorio()
-      alert("Empleado contratado correctamente")
+      alert("Empleado contratado en Central")
     } catch (e) {
       alert(e instanceof Error ? e.message : "Error")
     }
@@ -117,7 +124,7 @@ export default function AdminEmpleadosPage() {
         ok: boolean
         empleado?: Record<string, unknown>
         message?: string
-      }>(`/api/admin-sede/empleados?id=${id}`)
+      }>(`/api/owner/empleados?id=${id}`)
       if (!d.ok || !d.empleado) throw new Error(d.message ?? "No se pudo cargar")
       setEditRow(d.empleado)
       setSalarioEdit(String(rowField(d.empleado, "Salario_base") ?? ""))
@@ -158,10 +165,10 @@ export default function AdminEmpleadosPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap justify-between items-start gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Empleados</h1>
+          <h1 className="text-2xl font-bold">Empleados — Central</h1>
           <p className="text-sm text-muted-foreground max-w-xl">
-            Contratar personal con los mismos datos de registro de cliente más campos
-            laborales. Solo puede crear acceso <strong>vendedor</strong> (nivel 2).
+            Contratar personal en la sede <strong>Central</strong>. Acceso: vendedor (2) o admin
+            sede (3).
           </p>
         </div>
         <Dialog open={openContratar} onOpenChange={setOpenContratar}>
@@ -172,11 +179,11 @@ export default function AdminEmpleadosPage() {
           </DialogTrigger>
           <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Contratar empleado</DialogTitle>
+              <DialogTitle>Contratar en Central</DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
-              <p className="text-xs text-muted-foreground">
-                sp_Contratar_Personal_Completo — datos personales como cliente
+              <p className="text-xs rounded-lg bg-muted px-3 py-2">
+                Sede: <strong>Central</strong> (automático)
               </p>
               {(["nombre", "apellido", "ci", "telefono", "email"] as const).map((k) => (
                 <div key={k}>
@@ -232,7 +239,7 @@ export default function AdminEmpleadosPage() {
                     })
                   }
                 />
-                Crear acceso al sistema (vendedor)
+                Crear acceso al sistema
               </label>
               {contratarForm.crear_usuario && (
                 <>
@@ -255,6 +262,23 @@ export default function AdminEmpleadosPage() {
                       }
                     />
                   </div>
+                  <div>
+                    <Label>Rol de acceso</Label>
+                    <Select
+                      value={contratarForm.nivel_acceso}
+                      onValueChange={(v) =>
+                        setContratarForm({ ...contratarForm, nivel_acceso: v })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="2">Vendedor</SelectItem>
+                        <SelectItem value="3">Admin sede</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </>
               )}
               <Button
@@ -271,7 +295,7 @@ export default function AdminEmpleadosPage() {
 
       <Tabs defaultValue="directorio">
         <TabsList>
-          <TabsTrigger value="directorio">Directorio</TabsTrigger>
+          <TabsTrigger value="directorio">Directorio Central</TabsTrigger>
           <TabsTrigger value="editar">Editar salario</TabsTrigger>
         </TabsList>
 
@@ -309,7 +333,7 @@ export default function AdminEmpleadosPage() {
                     setSaving(true)
                     try {
                       const res = await fetchJson<{ ok: boolean; message?: string }>(
-                        "/api/admin-sede/empleados",
+                        "/api/owner/empleados",
                         {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
@@ -371,7 +395,7 @@ export default function AdminEmpleadosPage() {
               <div>
                 <h2 className="font-semibold">{rowStr(editRow, "Nombre_completo")}</h2>
                 <p className="text-sm text-muted-foreground">
-                  #{rowStr(editRow, "id_empleado")} · CI {rowStr(editRow, "CI")}
+                  #{rowStr(editRow, "id_empleado")} · Central
                 </p>
               </div>
               <div>

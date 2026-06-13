@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/empty-state"
 import { Database } from "lucide-react"
 import { formatMoney } from "@/lib/format"
 import { LOCALE } from "@/lib/locale"
+import { rowField } from "@/lib/api/row-field"
 
 interface DataTableViewProps {
   title?: string
@@ -15,6 +16,7 @@ interface DataTableViewProps {
   searchKeys?: string[]
   loading?: boolean
   emptyTitle?: string
+  onRowClick?: (row: Record<string, unknown>) => void
 }
 
 export function DataTableView({
@@ -23,6 +25,7 @@ export function DataTableView({
   searchKeys,
   loading,
   emptyTitle = "Sin registros",
+  onRowClick,
 }: DataTableViewProps) {
   const keys =
     columnKeys ??
@@ -58,18 +61,27 @@ export function DataTableView({
       data={filtered}
       columns={columns}
       loading={loading}
-      keyExtractor={(r) =>
-        `${String(r.Sede ?? r.sede ?? "")}-${String(
-          r.id_venta ??
-          r.id_empleado ??
-          r.id_cliente ??      // ← agregar esto
-          r.id_producto ??
-          r.id_log ??
-          r.id_compra ??
-          r.id_usuario ??
-          JSON.stringify(r).slice(0, 60)
-        ) }`
-      }
+      onRowClick={onRowClick}
+      keyExtractor={(r, index) => {
+        const id = rowField(
+          r,
+          "id_log",
+          "id_venta",
+          "id_empleado",
+          "id_cliente",
+          "id_categoria",
+          "id_subcategoria",
+          "id_producto",
+          "id_compra",
+          "id_usuario",
+          "id_promocion",
+          "id_proveedor"
+        )
+        if (id != null && id !== "") return String(id)
+        const sede = rowField(r, "Sede", "sede")
+        const nombre = rowField(r, "Nombre", "Producto", "Nombre_completo")
+        return `${String(sede ?? "row")}-${String(nombre ?? index)}-${index}`
+      }}
     />
   )
 }

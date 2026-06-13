@@ -36,6 +36,7 @@ interface FormData {
 
 export default function RegisterPage() {
   const router = useRouter();
+  const [modo, setModo] = useState<"nuevo" | "existente">("nuevo");
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState<FormData>({
@@ -128,6 +129,7 @@ export default function RegisterPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          action: "registro_completo",
           nombre: formData.nombre,
           apellido: formData.apellido,
           ci: formData.ci,
@@ -151,6 +153,45 @@ export default function RegisterPage() {
     }
   };
 
+  const handleActivarExistente = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormError(null);
+    if (!formData.email) {
+      setFormError("Ingrese su correo.");
+      return;
+    }
+    if (formData.password.length < 6) {
+      setFormError("La contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+    if (formData.password !== formData.confirmPassword) {
+      setFormError("Las contraseñas no coinciden.");
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "activar_existente",
+          email: formData.email,
+          password: formData.password,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        setFormError(data.message ?? "No se pudo activar la cuenta.");
+        return;
+      }
+      router.push("/auth/register-success");
+    } catch {
+      setFormError("Error de conexión con el servidor.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const inputClass = (field: keyof FormData) =>
     cn("pl-10 h-12 rounded-xl", errors[field] && "border-destructive");
 
@@ -158,10 +199,77 @@ export default function RegisterPage() {
     <AuthLayout>
       <AuthCard className="max-w-lg">
         <AuthHeader
-          title="Crear cuenta"
-          description="Únete a La Santa Cruz y disfruta de beneficios exclusivos"
+          title={modo === "nuevo" ? "Crear cuenta" : "Activar mi cuenta"}
+          description={
+            modo === "nuevo"
+              ? "Únete a La Santa Cruz y disfruta de beneficios exclusivos"
+              : "Ya compraste en tienda: use el mismo correo y elija contraseña"
+          }
         />
 
+        <div className="flex gap-2 mb-6 p-1 bg-muted rounded-xl">
+          <button
+            type="button"
+            className={cn(
+              "flex-1 py-2 text-sm rounded-lg transition-colors",
+              modo === "nuevo" && "bg-background shadow font-medium"
+            )}
+            onClick={() => setModo("nuevo")}
+          >
+            Registro nuevo
+          </button>
+          <button
+            type="button"
+            className={cn(
+              "flex-1 py-2 text-sm rounded-lg transition-colors",
+              modo === "existente" && "bg-background shadow font-medium"
+            )}
+            onClick={() => setModo("existente")}
+          >
+            Ya soy cliente
+          </button>
+        </div>
+
+        {modo === "existente" ? (
+          <form onSubmit={handleActivarExistente} className="space-y-4">
+            {formError && (
+              <p className="text-sm text-destructive bg-destructive/10 rounded-lg px-3 py-2">
+                {formError}
+              </p>
+            )}
+            <div>
+              <Label>Correo (el de su ficha en tienda)</Label>
+              <Input
+                type="email"
+                className="h-12 rounded-xl"
+                value={formData.email}
+                onChange={(e) => updateField("email", e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>Contraseña</Label>
+              <PasswordInput
+                value={formData.password}
+                onChange={(v) => updateField("password", v)}
+              />
+            </div>
+            <div>
+              <Label>Confirmar contraseña</Label>
+              <PasswordInput
+                value={formData.confirmPassword}
+                onChange={(v) => updateField("confirmPassword", v)}
+              />
+            </div>
+            <Button type="submit" className="w-full h-12 rounded-xl" disabled={isLoading}>
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Activar cuenta web"
+              )}
+            </Button>
+          </form>
+        ) : (
+          <>
         {/* Stepper */}
         <div className="mb-8">
           <AnimatedStepper
@@ -428,6 +536,8 @@ export default function RegisterPage() {
             Inicia sesión
           </Link>
         </p>
+          </>
+        )}
       </AuthCard>
     </AuthLayout>
   );

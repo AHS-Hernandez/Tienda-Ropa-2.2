@@ -6,8 +6,20 @@ import {
   modificarFichaProducto,
   actualizarPrecios,
   getSubcategorias,
+  getCategoriasList,
+  agregarCategoria,
+  agregarSubcategoria,
+  modificarCategoria,
+  modificarSubcategoria,
 } from "@/lib/data/producto"
 import { getSqlErrorMessage } from "@/lib/db/errors"
+
+function replicationHint(message: string): string {
+  if (/timeout|linked|7416|SEDE|distributed/i.test(message)) {
+    return `${message} — Si tarda mucho, verifique linked server SEDE o ejecute el alta directo en SSMS.`
+  }
+  return message
+}
 
 export async function GET(request: Request) {
   const session = await requireApiSession(["admin-global"])
@@ -33,6 +45,8 @@ export async function POST(request: Request) {
   const session = await requireApiSession(["admin-global"])
   if (sessionIsResponse(session)) return session
 
+  const actor = session.id_usuario
+
   try {
     const body = await request.json()
 
@@ -41,10 +55,58 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, subcategorias })
     }
 
+    if (body.action === "categorias") {
+      const categorias = await getCategoriasList()
+      return NextResponse.json({ ok: true, categorias })
+    }
+
+    if (body.action === "crear_categoria") {
+      await agregarCategoria(actor, String(body.nombre ?? "").trim())
+      const categorias = await getCategoriasList()
+      return NextResponse.json({ ok: true, categorias })
+    }
+
+    if (body.action === "crear_subcategoria") {
+      await agregarSubcategoria(
+        actor,
+        Number(body.id_categoria),
+        String(body.nombre ?? "").trim()
+      )
+      const [categorias, subcategorias] = await Promise.all([
+        getCategoriasList(),
+        getSubcategorias(),
+      ])
+      return NextResponse.json({ ok: true, categorias, subcategorias })
+    }
+
+    if (body.action === "editar_categoria") {
+      await modificarCategoria(
+        actor,
+        Number(body.id_categoria),
+        String(body.nombre ?? "").trim()
+      )
+      const categorias = await getCategoriasList()
+      return NextResponse.json({ ok: true, categorias })
+    }
+
+    if (body.action === "editar_subcategoria") {
+      await modificarSubcategoria(
+        actor,
+        Number(body.id_subcategoria),
+        String(body.nombre ?? "").trim(),
+        body.id_categoria != null ? Number(body.id_categoria) : undefined
+      )
+      const [categorias, subcategorias] = await Promise.all([
+        getCategoriasList(),
+        getSubcategorias(),
+      ])
+      return NextResponse.json({ ok: true, categorias, subcategorias })
+    }
+
     if (body.action === "crear") {
-      await registrarProducto({
+      await registrarProducto(actor, {
         idSubcategoria: Number(body.id_subcategoria),
-        nombre: body.nombre,
+        nombre: String(body.nombre ?? ""),
         descripcion: body.descripcion ?? "",
         marca: body.marca ?? "",
         color: body.color ?? "",
@@ -79,7 +141,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: "Acción no válida" }, { status: 400 })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, message: getSqlErrorMessage(error) },
+      { ok: false, message: replicationHint(getSqlErrorMessage(error)) },
       { status: 400 }
     )
   }

@@ -32,11 +32,18 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
+    const nivel = Number(body.nivel_acceso ?? 2)
+    if (nivel !== 2) {
+      return NextResponse.json(
+        { ok: false, message: "Admin de sede solo puede crear usuarios vendedor (nivel 2)" },
+        { status: 403 }
+      )
+    }
     await crearUsuarioEmpleado(session.id_usuario, {
       idEmpleado: Number(body.id_empleado),
       username: body.username,
       password: body.password,
-      nivelAcceso: Number(body.nivel_acceso),
+      nivelAcceso: nivel,
       idSede: session.id_sede,
     })
     return NextResponse.json({ ok: true })
@@ -54,9 +61,16 @@ export async function PUT(request: Request) {
 
   try {
     const body = await request.json()
+    const nuevoNivel = Number(body.nivel_acceso)
+    if (nuevoNivel !== 2) {
+      return NextResponse.json(
+        { ok: false, message: "Admin de sede solo puede asignar nivel vendedor (2)" },
+        { status: 403 }
+      )
+    }
     await actualizarSeguridadUsuario(session.id_usuario, {
       idUsuarioDestino: Number(body.id_usuario),
-      nuevoNivel: Number(body.nivel_acceso),
+      nuevoNivel,
       estado: body.estado !== false,
     })
     return NextResponse.json({ ok: true })

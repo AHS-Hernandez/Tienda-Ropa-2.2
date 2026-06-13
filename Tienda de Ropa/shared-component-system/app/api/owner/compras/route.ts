@@ -25,10 +25,11 @@ export async function GET(request: Request) {
 
     if (searchParams.get("productos") === "1") {
       const q = searchParams.get("q")?.trim() ?? ""
-      if (!q) {
+      const soloPromo = searchParams.get("promo") === "1"
+      if (!q && !soloPromo) {
         return jsonData({ ok: true, productos: [] })
       }
-      const productos = await buscarProductosCompra(q)
+      const productos = await buscarProductosCompra(q, 50, { soloPromocion: soloPromo })
       return jsonData({ ok: true, productos })
     }
 

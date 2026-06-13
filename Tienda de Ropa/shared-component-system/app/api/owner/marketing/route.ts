@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { requireApiSession, sessionIsResponse } from "@/lib/auth/api"
+import { toPositiveInt } from "@/lib/api/parse-int"
 import {
   listPromocionesCabecera,
   listPromociones,
@@ -13,6 +14,15 @@ import {
   limpiarAlcances,
 } from "@/lib/data/marketing"
 import { getSqlErrorMessage } from "@/lib/db/errors"
+
+function parseAlcance(body: Record<string, unknown>) {
+  return {
+    idProducto: toPositiveInt(body.id_producto),
+    idCategoria: toPositiveInt(body.id_categoria),
+    idSubcategoria: toPositiveInt(body.id_subcategoria),
+    montoMinimo: Number(body.monto_minimo) || 0,
+  }
+}
 
 export async function GET() {
   const session = await requireApiSession(["admin-global"])
@@ -49,6 +59,14 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json()
+    const alcance = parseAlcance(body)
+
+    if (!alcance.idProducto && !alcance.idCategoria && !alcance.idSubcategoria) {
+      throw new Error(
+        "Debe asignar alcance: producto, categoría o subcategoría (sp_Asignar_Alcance_Promocion)."
+      )
+    }
+
     const id = await registrarCampana({
       nombre: body.nombre,
       porcentaje: body.tipo === "porcentaje" ? Number(body.valor) : null,
@@ -57,20 +75,9 @@ export async function POST(request: Request) {
       fechaFin: body.fecha_fin,
     })
 
-    const tieneAlcance =
-      body.id_producto || body.id_categoria || body.id_subcategoria
-    if (!tieneAlcance) {
-      throw new Error(
-        "Debe asignar alcance: producto, categoría o subcategoría (sp_Asignar_Alcance_Promocion)."
-      )
-    }
-
     await asignarAlcance({
       idPromocion: id,
-      idProducto: body.id_producto ? Number(body.id_producto) : null,
-      idCategoria: body.id_categoria ? Number(body.id_categoria) : null,
-      idSubcategoria: body.id_subcategoria ? Number(body.id_subcategoria) : null,
-      montoMinimo: body.monto_minimo ?? 0,
+      ...alcance,
     })
 
     return NextResponse.json({ ok: true, id_promocion: id })
@@ -101,17 +108,10 @@ export async function PUT(request: Request) {
     })
 
     if (body.reasignar_alcance) {
+      const alcance = parseAlcance(body)
       await limpiarAlcances(id)
-      const tiene =
-        body.id_producto || body.id_categoria || body.id_subcategoria
-      if (tiene) {
-        await asignarAlcance({
-          idPromocion: id,
-          idProducto: body.id_producto ? Number(body.id_producto) : null,
-          idCategoria: body.id_categoria ? Number(body.id_categoria) : null,
-          idSubcategoria: body.id_subcategoria ? Number(body.id_subcategoria) : null,
-          montoMinimo: body.monto_minimo ?? 0,
-        })
+      if (alcance.idProducto || alcance.idCategoria || alcance.idSubcategoria) {
+        await asignarAlcance({ idPromocion: id, ...alcance })
       }
     }
 

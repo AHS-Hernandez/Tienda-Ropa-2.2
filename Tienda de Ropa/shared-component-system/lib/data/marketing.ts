@@ -1,5 +1,6 @@
 import { getDbPool, sql } from "@/lib/db"
-import { queryRows } from "@/lib/db/query"
+import { toPositiveInt } from "@/lib/api/parse-int"
+import { queryRows, queryOne } from "@/lib/db/query"
 
 export async function listPromociones() {
   return queryRows(`SELECT * FROM Marketing.vw_Explorador_Descuentos_Full ORDER BY Campana`)
@@ -44,7 +45,7 @@ export async function registrarCampana(params: {
   fechaFin: string
 }): Promise<number> {
   const pool = await getDbPool()
-  const result = await pool
+  const req = pool
     .request()
     .input("nombre", sql.NVarChar(100), params.nombre)
     .input("porcentaje", sql.Decimal(5, 2), params.porcentaje)
@@ -52,9 +53,16 @@ export async function registrarCampana(params: {
     .input("fecha_inicio", sql.Date, params.fechaInicio)
     .input("fecha_fin", sql.Date, params.fechaFin)
     .output("id_promocion_generado", sql.Int)
-    .execute("Marketing.sp_Registrar_Campana")
 
-  const id = result.output.id_promocion_generado as number
+  const result = await req.execute("Marketing.sp_Registrar_Campana")
+
+  let id = result.output.id_promocion_generado as number | undefined
+  if (!id || id <= 0) {
+    const row = await queryOne<{ id: number }>(
+      `SELECT TOP 1 id_promocion AS id FROM Marketing.Promocion ORDER BY id_promocion DESC`
+    )
+    id = row?.id
+  }
   if (!id) throw new Error("No se generó id de promoción")
   return id
 }
@@ -94,13 +102,23 @@ export async function asignarAlcance(params: {
   idSubcategoria?: number | null
   montoMinimo?: number
 }) {
+  const idProducto = toPositiveInt(params.idProducto)
+  const idCategoria = toPositiveInt(params.idCategoria)
+  const idSubcategoria = toPositiveInt(params.idSubcategoria)
+
+  if (!idProducto && !idCategoria && !idSubcategoria) {
+    throw new Error(
+      "Alcance inválido: seleccione producto, categoría o subcategoría."
+    )
+  }
+
   const pool = await getDbPool()
   await pool
     .request()
     .input("id_promocion", sql.Int, params.idPromocion)
-    .input("id_producto", sql.Int, params.idProducto ?? null)
-    .input("id_categoria", sql.Int, params.idCategoria ?? null)
-    .input("id_subcategoria", sql.Int, params.idSubcategoria ?? null)
+    .input("id_producto", sql.Int, idProducto)
+    .input("id_categoria", sql.Int, idCategoria)
+    .input("id_subcategoria", sql.Int, idSubcategoria)
     .input("monto_minimo", sql.Decimal(10, 2), params.montoMinimo ?? 0)
     .execute("Marketing.sp_Asignar_Alcance_Promocion")
 }

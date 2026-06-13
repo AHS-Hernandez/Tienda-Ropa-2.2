@@ -94,11 +94,10 @@ export default function OwnerStockPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Stock global</h1>
+        <h1 className="text-2xl font-bold">Stock Central</h1>
         <p className="text-sm text-muted-foreground max-w-2xl">
-          <strong>Reporte:</strong> pestaña Consolidado (vista linked + local).{" "}
-          <strong>Mover stock Central → Sede:</strong> pestaña Transferir (
-          <code>sp_Transferir_Stock</code>). Requiere stock en origen.
+          Inventario actual de la sede <strong>Central</strong>. Para enviar mercadería a otra
+          sede use la pestaña Transferir (<code>sp_Transferir_Stock</code>).
         </p>
       </div>
       {loading ? (
@@ -106,19 +105,17 @@ export default function OwnerStockPage() {
       ) : (
         <Tabs defaultValue="consolidado">
           <TabsList>
-            <TabsTrigger value="consolidado">Reporte consolidado</TabsTrigger>
+            <TabsTrigger value="consolidado">Stock actual (Central)</TabsTrigger>
             <TabsTrigger value="alertas">Alertas ({alertas.length})</TabsTrigger>
             <TabsTrigger value="transferir">Transferir a sede</TabsTrigger>
           </TabsList>
           <TabsContent value="consolidado" className="mt-4">
             <p className="text-xs text-muted-foreground mb-2">
-              Todos los productos del catálogo por sede (0 si no hay fila en stock).
+              Catálogo completo con cantidades en Central (0 si aún no hay recepción de compra).
             </p>
             <DataTableView
               rows={consolidado}
               columnKeys={[
-                "Sede",
-                "id_producto",
                 "Producto",
                 "Marca",
                 "Talla",
@@ -135,8 +132,6 @@ export default function OwnerStockPage() {
             <DataTableView
               rows={alertas}
               columnKeys={[
-                "Sede",
-                "id_producto",
                 "Producto",
                 "Marca",
                 "Talla",

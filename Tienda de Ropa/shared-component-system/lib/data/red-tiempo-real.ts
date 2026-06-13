@@ -10,17 +10,6 @@ export type RedTiempoRealBlock = {
   source: "linked" | "local" | "proxy"
 }
 
-const PROXY_HINT =
-  "Lectura vía procedimiento proxy (dbo). Para Central+Sede confirme linked server."
-
-async function execRedSp(
-  procedureName: string
-): Promise<Record<string, unknown>[]> {
-  const pool = await getDbPool()
-  const result = await pool.request().execute(procedureName)
-  return (result.recordset ?? []) as Record<string, unknown>[]
-}
-
 async function loadLinkedOrCentral(
   linkedSql: string,
   centralSql: string,
@@ -42,8 +31,7 @@ async function loadLinkedOrCentral(
       return {
         rows,
         error: null,
-        warning:
-          "Solo Central. Ejecute SQL-SP-Red-Global-Proxy.sql en TiendaRopa.",
+        warning: "Solo Central. Linked server no disponible.",
         linkedError: linkedMsg,
         source: "local",
       }
@@ -56,33 +44,6 @@ async function loadLinkedOrCentral(
         source: "local",
       }
     }
-  }
-}
-
-async function loadViaProxy(
-  procedureName: string,
-  linkedSql: string,
-  centralSql: string
-): Promise<RedTiempoRealBlock> {
-  try {
-    const rows = await execRedSp(procedureName)
-    const hasSede = rows.some((r) => {
-      const sede = String(r.Sede ?? "").toLowerCase()
-      return sede !== "central" && sede !== ""
-    })
-    return {
-      rows,
-      error: null,
-      warning: hasSede ? null : PROXY_HINT,
-      linkedError: null,
-      source: "proxy",
-    }
-  } catch (proxyErr) {
-    return loadLinkedOrCentral(
-      linkedSql,
-      centralSql,
-      getSqlErrorMessage(proxyErr)
-    )
   }
 }
 
@@ -168,32 +129,28 @@ const SQL = {
 } as const
 
 export async function getRedVentasHoyGlobal(): Promise<RedTiempoRealBlock> {
-  return loadViaProxy(
-    "Configuracion.sp_Red_Ventas_Hoy_Global",
+  return loadLinkedOrCentral(
     SQL.ventasLinked,
     SQL.ventasCentral
   )
 }
 
 export async function getRedEmpleadosGlobal(): Promise<RedTiempoRealBlock> {
-  return loadViaProxy(
-    "Configuracion.sp_Red_Empleados_Global",
+  return loadLinkedOrCentral(
     SQL.empleadosLinked,
     SQL.empleadosCentral
   )
 }
 
 export async function getRedClientesGlobal(): Promise<RedTiempoRealBlock> {
-  return loadViaProxy(
-    "Configuracion.sp_Red_Clientes_Global",
+  return loadLinkedOrCentral(
     SQL.clientesLinked,
     SQL.clientesCentral
   )
 }
 
 export async function getRedStockSedeTiempoReal(): Promise<RedTiempoRealBlock> {
-  return loadViaProxy(
-    "Configuracion.sp_Red_Stock_Sede_TiempoReal",
+  return loadLinkedOrCentral(
     SQL.stockLinked,
     SQL.stockCentral
   )

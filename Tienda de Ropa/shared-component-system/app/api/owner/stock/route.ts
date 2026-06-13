@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server"
 import { sanitizeRows } from "@/lib/api/sanitize-rows"
 import { requireApiSession, sessionIsResponse } from "@/lib/auth/api"
+import { getIdSedeCentral, getSedesActivas } from "@/lib/data/config"
 import {
-  getStockConsolidado,
-  getAlertasStock,
+  getStockCentral,
+  getAlertasStockCentral,
   transferirStock,
 } from "@/lib/data/inventario"
-import { getSedesActivas } from "@/lib/data/config"
 import { getSqlErrorMessage } from "@/lib/db/errors"
 
 export async function GET(request: Request) {
@@ -22,12 +22,14 @@ export async function GET(request: Request) {
       return NextResponse.json({ ok: true, sedes })
     }
 
+    const idCentral = await getIdSedeCentral()
+
     if (alertas) {
-      const rows = await getAlertasStock()
-      return NextResponse.json({ ok: true, stock: sanitizeRows(rows) })
+      const rows = await getAlertasStockCentral(idCentral)
+      return NextResponse.json({ ok: true, stock: sanitizeRows(rows), sede: "Central" })
     }
-    const stock = await getStockConsolidado()
-    return NextResponse.json({ ok: true, stock: sanitizeRows(stock) })
+    const stock = await getStockCentral(idCentral)
+    return NextResponse.json({ ok: true, stock: sanitizeRows(stock), sede: "Central" })
   } catch (error) {
     return NextResponse.json(
       { ok: false, message: getSqlErrorMessage(error) },

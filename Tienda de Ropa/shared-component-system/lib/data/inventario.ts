@@ -49,10 +49,53 @@ export async function getStockSede(idSede: number): Promise<Record<string, unkno
   )
 }
 
-/** Todos los productos × sedes activas (cantidad 0 si no hay fila en Stock_Actual en Central). */
-export async function getStockConsolidado(): Promise<Record<string, unknown>[]> {
-  const local = await queryRows<Record<string, unknown>>(SQL_STOCK_TODOS_LOCAL)
-  return local.map(normalizeFilaStock)
+export async function getStockCentral(idSedeCentral: number): Promise<Record<string, unknown>[]> {
+  const rows = await queryRows<Record<string, unknown>>(
+    `SELECT
+      s.Nombre AS Sede,
+      s.id_sede,
+      p.id_producto,
+      p.Nombre AS Producto,
+      p.Marca,
+      p.Talla,
+      p.Color,
+      ISNULL(sa.Cantidad, 0) AS Cantidad
+    FROM Producto.Producto p
+    CROSS JOIN Configuracion.Sede s
+    LEFT JOIN Inventario.Stock_Actual sa
+      ON sa.id_producto = p.id_producto AND sa.id_sede = s.id_sede
+    WHERE s.id_sede = @id_sede
+    ORDER BY p.Nombre`,
+    { id_sede: idSedeCentral }
+  )
+  return rows.map(normalizeFilaStock)
+}
+
+export async function getAlertasStockCentral(
+  idSedeCentral: number
+): Promise<Record<string, unknown>[]> {
+  const rows = await queryRows<Record<string, unknown>>(
+    `SELECT
+      s.Nombre AS Sede,
+      p.id_producto,
+      p.Nombre AS Producto,
+      p.Marca,
+      p.Talla,
+      p.Color,
+      sa.Cantidad AS Cantidad,
+      CASE
+        WHEN sa.Cantidad = 0 THEN 'Agotado'
+        WHEN sa.Cantidad <= 5 THEN 'Crítico'
+        ELSE 'Bajo'
+      END AS Nivel_Alerta
+    FROM Inventario.Stock_Actual sa
+    INNER JOIN Producto.Producto p ON sa.id_producto = p.id_producto
+    INNER JOIN Configuracion.Sede s ON sa.id_sede = s.id_sede
+    WHERE sa.id_sede = @id_sede AND sa.Cantidad <= 10
+    ORDER BY sa.Cantidad, p.Nombre`,
+    { id_sede: idSedeCentral }
+  )
+  return rows.map(normalizeFilaStock)
 }
 
 /** Solo filas con registro en Stock_Actual y cantidad ≤ 10 (no marca “agotado” por ausencia de fila). */

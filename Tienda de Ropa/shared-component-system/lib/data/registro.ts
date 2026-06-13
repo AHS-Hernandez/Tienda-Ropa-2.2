@@ -40,3 +40,54 @@ export async function registroMaestroCliente(
     .input("id_sede", sql.Int, idSede)
     .execute("Seguridad.sp_Registro_Maestro_Cliente")
 }
+
+/** Cliente ya en Persona/Cliente: solo correo + contraseña → cuenta web nivel 1 */
+export async function activarUsuarioClienteExistente(params: {
+  email: string
+  password: string
+  idSede?: number
+  idActor?: number
+}): Promise<void> {
+  const pool = await getDbPool()
+  if (params.idActor) await setDbSessionContext(params.idActor)
+
+  const req = pool
+    .request()
+    .input("Email", sql.NVarChar(100), params.email.trim().toLowerCase())
+    .input("Password", sql.NVarChar(255), params.password)
+
+  if (params.idSede != null) {
+    req.input("id_sede", sql.Int, params.idSede)
+  } else {
+    req.input("id_sede", sql.Int, null)
+  }
+
+  await req.execute("Seguridad.sp_Activar_Usuario_Cliente_Existente")
+}
+
+export async function buscarPersonaPorEmail(
+  email: string,
+  idSede?: number
+): Promise<Record<string, unknown> | null> {
+  const { queryOne } = await import("@/lib/db/query")
+  let sqlText = `SELECT TOP 1
+      p.id_persona,
+      p.id_sede,
+      p.Nombre,
+      p.Apellido,
+      p.CI,
+      p.Email,
+      p.Telefono,
+      c.id_cliente,
+      CASE WHEN u.id_usuario IS NOT NULL THEN 1 ELSE 0 END AS tiene_cuenta
+    FROM Persona.Persona p
+    LEFT JOIN Persona.Cliente c ON c.id_persona = p.id_persona
+    LEFT JOIN Seguridad.Usuario u ON u.id_persona = p.id_persona
+    WHERE LOWER(LTRIM(RTRIM(p.Email))) = LOWER(LTRIM(RTRIM(@email)))`
+  const params: Record<string, unknown> = { email: email.trim() }
+  if (idSede != null) {
+    sqlText += ` AND p.id_sede = @id_sede`
+    params.id_sede = idSede
+  }
+  return queryOne(sqlText, params)
+}

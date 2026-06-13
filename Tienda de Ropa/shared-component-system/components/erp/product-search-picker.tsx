@@ -12,12 +12,15 @@ export interface ProductoPick {
   precio_costo?: number
   marca?: string | null
   talla?: string | null
+  promocion?: string
+  precio_oferta?: number
 }
 
 interface ProductSearchPickerProps {
   apiBase: string
   label?: string
   hint?: string
+  soloPromocion?: boolean
   onSelect: (p: ProductoPick) => void
   selectedId?: number | null
 }
@@ -26,6 +29,7 @@ export function ProductSearchPicker({
   apiBase,
   label = "Buscar producto",
   hint = "Nombre, marca o número de ID. Pulse un resultado.",
+  soloPromocion = false,
   onSelect,
   selectedId,
 }: ProductSearchPickerProps) {
@@ -36,14 +40,17 @@ export function ProductSearchPicker({
 
   useEffect(() => {
     const t = q.trim()
-    if (t.length < 1) {
+    if (t.length < 1 && !soloPromocion) {
       setHits([])
       return
     }
     setLoading(true)
     setSearchError(null)
     const timer = setTimeout(() => {
-      const url = `${apiBase}${apiBase.includes("?") ? "&" : "?"}productos=1&q=${encodeURIComponent(t)}`
+      const sep = apiBase.includes("?") ? "&" : "?"
+      const promoParam = soloPromocion ? "&promo=1" : ""
+      const qParam = t ? `&q=${encodeURIComponent(t)}` : ""
+      const url = `${apiBase}${sep}productos=1${promoParam}${qParam}`
       fetchJson<{ ok: boolean; productos?: Record<string, unknown>[]; message?: string }>(url)
         .then((d) => {
           if (!d.ok) throw new Error(d.message ?? "Error al buscar")
@@ -55,6 +62,9 @@ export function ProductSearchPicker({
                 p.precio_costo != null ? Number(p.precio_costo) : undefined,
               marca: p.marca != null ? String(p.marca) : null,
               talla: p.talla != null ? String(p.talla) : null,
+              promocion: p.promocion != null ? String(p.promocion) : undefined,
+              precio_oferta:
+                p.precio_oferta != null ? Number(p.precio_oferta) : undefined,
             }))
           )
         })
@@ -63,9 +73,9 @@ export function ProductSearchPicker({
           setSearchError(e instanceof Error ? e.message : "Error de búsqueda")
         })
         .finally(() => setLoading(false))
-    }, 300)
+    }, soloPromocion && !t ? 0 : 300)
     return () => clearTimeout(timer)
-  }, [q, apiBase])
+  }, [q, apiBase, soloPromocion])
 
   return (
     <div className="space-y-2">
@@ -107,6 +117,12 @@ export function ProductSearchPicker({
                 {p.precio_costo != null && (
                   <span className="block text-xs text-muted-foreground">
                     Costo ref.: {p.precio_costo}
+                  </span>
+                )}
+                {p.promocion && (
+                  <span className="block text-xs text-primary font-medium">
+                    Promo: {p.promocion}
+                    {p.precio_oferta != null ? ` · Oferta Bs. ${p.precio_oferta}` : ""}
                   </span>
                 )}
               </button>

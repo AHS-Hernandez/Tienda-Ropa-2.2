@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import Link from "next/link"
 import { DataTableView } from "@/components/erp/data-table-view"
+import { ModernTable, type Column } from "@/components/tables/modern-table"
 import { PageToolbar } from "@/components/erp/page-toolbar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -49,6 +50,13 @@ export default function VendedorClientesPage() {
   const [openCrear, setOpenCrear] = useState(false)
   const [crearForm, setCrearForm] = useState(emptyCrear)
   const [saving, setSaving] = useState(false)
+
+  const [activarEmail, setActivarEmail] = useState("")
+  const [activarPass, setActivarPass] = useState("")
+  const [activarPreview, setActivarPreview] = useState<Record<string, unknown> | null>(
+    null
+  )
+  const [activarError, setActivarError] = useState<string | null>(null)
 
   const loadDirectorio = useCallback(() => {
     setListLoading(true)
@@ -171,6 +179,49 @@ export default function VendedorClientesPage() {
     setEditForm({ telefono: "", email: "", direccion: "", nit: "" })
   }
 
+  const buscarEmailActivar = async () => {
+    const email = activarEmail.trim()
+    if (!email) return
+    setActivarError(null)
+    setActivarPreview(null)
+    try {
+      const d = await fetchJson<{
+        ok: boolean
+        persona?: Record<string, unknown> | null
+        message?: string
+      }>(`/api/vendedor/clientes?email=${encodeURIComponent(email)}`)
+      if (!d.ok) throw new Error(d.message)
+      if (!d.persona) {
+        setActivarError("No hay cliente con ese correo en su sede.")
+        return
+      }
+      if (Number(d.persona.tiene_cuenta) === 1) {
+        setActivarError("Ese cliente ya tiene cuenta web.")
+        setActivarPreview(d.persona)
+        return
+      }
+      setActivarPreview(d.persona)
+    } catch (e) {
+      setActivarError(e instanceof Error ? e.message : "Error")
+    }
+  }
+
+  const activarCuenta = async () => {
+    try {
+      await post({
+        action: "activar_cuenta",
+        email: activarEmail.trim(),
+        password: activarPass,
+      })
+      setActivarEmail("")
+      setActivarPass("")
+      setActivarPreview(null)
+      alert("Cuenta web activada")
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Error")
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap justify-between items-start gap-4">
@@ -230,6 +281,7 @@ export default function VendedorClientesPage() {
         <TabsList>
           <TabsTrigger value="directorio">Directorio</TabsTrigger>
           <TabsTrigger value="editar">Editar cliente</TabsTrigger>
+          <TabsTrigger value="activar">Activar cuenta web</TabsTrigger>
         </TabsList>
 
         <TabsContent value="directorio" className="space-y-4 mt-4">
@@ -248,18 +300,47 @@ export default function VendedorClientesPage() {
               <Loader2 className="h-8 w-8 animate-spin" />
             </div>
           ) : (
-            <DataTableView
-              rows={directorio}
-              columnKeys={[
-                "id_cliente",
-                "Nombre_completo",
-                "CI",
-                "Nit_ci_facturacion",
-                "Telefono",
-                "Email",
-              ]}
+            <ModernTable
+              data={directorio}
+              columns={[
+                { key: "id_cliente", header: "#" },
+                { key: "Nombre_completo", header: "Nombre" },
+                { key: "CI", header: "CI" },
+                { key: "Nit_ci_facturacion", header: "NIT/CI" },
+                { key: "Telefono", header: "Teléfono" },
+                { key: "Email", header: "Email" },
+              ] as Column<Record<string, unknown>>[]}
+              keyExtractor={(r) => String(rowField(r, "id_cliente") ?? JSON.stringify(r))}
               loading={listLoading}
-              emptyTitle="Sin clientes en esta sede"
+              actions={[
+                {
+                  label: "Activar cuenta",
+                  onClick: async (item) => {
+                    const email = String(item["Email"] ?? "").trim()
+                    if (!email) return alert("Email no disponible")
+                    const pass = prompt("Contraseña para la cuenta web:") ?? ""
+                    if (!pass) return
+                    setSaving(true)
+                    try {
+                      const res = await fetchJson<{ ok: boolean; message?: string }>(
+                        "/api/vendedor/clientes",
+                        {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ action: "activar_cuenta", email, password: pass }),
+                        }
+                      )
+                      if (!res.ok) throw new Error(res.message ?? "Error")
+                      alert("Cuenta activada")
+                      loadDirectorio()
+                    } catch (e) {
+                      alert(e instanceof Error ? e.message : "Error")
+                    } finally {
+                      setSaving(false)
+                    }
+                  },
+                },
+              ]}
             />
           )}
         </TabsContent>
@@ -350,6 +431,52 @@ export default function VendedorClientesPage() {
               </div>
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="activar" className="space-y-4 mt-4">
+          <div className="rounded-xl border p-4 space-y-3 max-w-lg">
+            <p className="text-sm text-muted-foreground">
+              Si el cliente ya está en el directorio (alta en tienda) pero sin login web,
+              ingrese su <strong>correo</strong> y defina contraseña.
+            </p>
+            <div>
+              <Label>Correo del cliente</Label>
+              <Input
+                type="email"
+                value={activarEmail}
+                onChange={(e) => {
+                  setActivarEmail(e.target.value)
+                  setActivarPreview(null)
+                  setActivarError(null)
+                }}
+                onBlur={buscarEmailActivar}
+              />
+            </div>
+            {activarError && (
+              <p className="text-sm text-destructive">{activarError}</p>
+            )}
+            {activarPreview && Number(activarPreview.tiene_cuenta) !== 1 && (
+              <p className="text-sm text-primary bg-primary/10 rounded-lg px-3 py-2">
+                {rowStr(activarPreview, "Nombre")} {rowStr(activarPreview, "Apellido")} — listo
+                para activar
+              </p>
+            )}
+            <div>
+              <Label>Contraseña nueva</Label>
+              <Input
+                type="password"
+                value={activarPass}
+                onChange={(e) => setActivarPass(e.target.value)}
+              />
+            </div>
+            <Button
+              className="w-full bg-brand-600"
+              onClick={activarCuenta}
+              disabled={saving || !activarPreview || Number(activarPreview.tiene_cuenta) === 1}
+            >
+              Activar cuenta (sp_Activar_Usuario_Cliente_Existente)
+            </Button>
+          </div>
         </TabsContent>
       </Tabs>
 

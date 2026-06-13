@@ -9,6 +9,10 @@ import {
   modificarCliente,
   registrarClienteCompleto,
 } from "@/lib/data/persona"
+import {
+  activarUsuarioClienteExistente,
+  buscarPersonaPorEmail,
+} from "@/lib/data/registro"
 import { getSqlErrorMessage } from "@/lib/db/errors"
 
 export async function GET(request: Request) {
@@ -34,6 +38,16 @@ export async function GET(request: Request) {
     }
 
     const q = searchParams.get("q")?.trim()
+    const emailLookup = searchParams.get("email")?.trim()
+
+    if (emailLookup) {
+      const persona = await buscarPersonaPorEmail(emailLookup, session.id_sede)
+      return jsonData({
+        ok: true,
+        persona: persona ? sanitizeRows([persona])[0] : null,
+      })
+    }
+
     if (q && q.length > 0) {
       const clientes = await buscarClientesSede(q, session.id_sede)
       return jsonData({ ok: true, clientes: sanitizeRows(clientes) })
@@ -65,8 +79,29 @@ export async function POST(request: Request) {
       )
     }
 
+    if (body.action === "activar_cuenta") {
+      const email = String(body.email ?? "").trim().toLowerCase()
+      const password = String(body.password ?? "")
+      if (!email || !password) {
+        return NextResponse.json(
+          { ok: false, message: "Correo y contraseña requeridos" },
+          { status: 400 }
+        )
+      }
+      await activarUsuarioClienteExistente({
+        email,
+        password,
+        idSede: session.id_sede,
+        idActor: session.id_usuario,
+      })
+      return jsonData({
+        ok: true,
+        message: "Cuenta web activada para el cliente",
+      })
+    }
+
     if (body.action === "crear") {
-      await registrarClienteCompleto({
+      await registrarClienteCompleto(session.id_usuario, {
         nombre: String(body.nombre ?? "").trim(),
         apellido: String(body.apellido ?? "").trim(),
         ci: String(body.ci ?? "").trim(),
@@ -76,6 +111,21 @@ export async function POST(request: Request) {
         nit: String(body.nit ?? "").trim(),
         idSede: session.id_sede,
       })
+
+      // Opcional: crear usuario web para el cliente inmediato (si se solicitó)
+      if (body.crear_usuario && body.password) {
+        const email = String(body.email ?? "").trim().toLowerCase()
+        const password = String(body.password ?? "")
+        if (email && password) {
+          await activarUsuarioClienteExistente({
+            email,
+            password,
+            idSede: session.id_sede,
+            idActor: session.id_usuario,
+          })
+        }
+      }
+
       return jsonData({ ok: true, message: "Cliente registrado en su sede" })
     }
 

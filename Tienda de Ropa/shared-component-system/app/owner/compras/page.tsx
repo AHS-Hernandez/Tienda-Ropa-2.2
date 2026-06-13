@@ -161,6 +161,7 @@ export default function OwnerComprasPage() {
           <TabsTrigger value="ordenes">Órdenes</TabsTrigger>
           <TabsTrigger value="proveedores">Proveedores</TabsTrigger>
           <TabsTrigger value="nuevo">Nueva orden</TabsTrigger>
+          <TabsTrigger value="promo">En promoción</TabsTrigger>
         </TabsList>
 
         <TabsContent value="ordenes" className="space-y-4">
@@ -285,6 +286,79 @@ export default function OwnerComprasPage() {
             </div>
             <Button onClick={emitirOrden} className="bg-brand-600 w-full">
               Emitir orden (sp_Emitir_Orden_Compra)
+            </Button>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="promo" className="grid md:grid-cols-2 gap-6">
+          <div className="rounded-xl border p-4 space-y-3 md:col-span-2">
+            <h2 className="font-semibold">Comprar productos en promoción</h2>
+            <p className="text-sm text-muted-foreground">
+              Solo productos con descuento vigente hoy. Busque o deje vacío para ver el listado.
+            </p>
+          </div>
+          <div className="rounded-xl border p-4 space-y-3 md:col-span-2">
+            <ProductSearchPicker
+              apiBase="/api/owner/compras"
+              soloPromocion
+              label="Productos en promoción"
+              hint="Escriba para filtrar o deje en blanco un momento para listar todos con promo activa."
+              onSelect={(p) =>
+                setOrdenForm({
+                  ...ordenForm,
+                  id_producto: p.id_producto,
+                  costo: String(p.precio_costo ?? ordenForm.costo),
+                })
+              }
+              selectedId={ordenForm.id_producto}
+            />
+          </div>
+          <div className="rounded-xl border p-4 space-y-3">
+            <h2 className="font-semibold">Emitir orden (promo)</h2>
+            <div>
+              <Label>Proveedor</Label>
+              <Select
+                value={ordenForm.id_proveedor}
+                onValueChange={(v) => setOrdenForm({ ...ordenForm, id_proveedor: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Elija proveedor" />
+                </SelectTrigger>
+                <SelectContent>
+                  {proveedores.map((p) => (
+                    <SelectItem
+                      key={rowStr(p, "id_proveedor")}
+                      value={rowStr(p, "id_proveedor")}
+                    >
+                      {rowStr(p, "Razon_social")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label>Cantidad</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={ordenForm.cantidad}
+                  onChange={(e) => setOrdenForm({ ...ordenForm, cantidad: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Costo unit. (Bs.)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={ordenForm.costo}
+                  onChange={(e) => setOrdenForm({ ...ordenForm, costo: e.target.value })}
+                />
+              </div>
+            </div>
+            <Button onClick={emitirOrden} className="bg-brand-600 w-full">
+              Emitir orden de producto en promo
             </Button>
           </div>
         </TabsContent>

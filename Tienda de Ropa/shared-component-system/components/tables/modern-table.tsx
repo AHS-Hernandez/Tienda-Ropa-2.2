@@ -47,7 +47,8 @@ interface ModernTableProps<T> {
   sortColumn?: string
   sortDirection?: "asc" | "desc"
   onSort?: (column: string) => void
-  keyExtractor: (item: T) => string
+  onRowClick?: (item: T) => void
+  keyExtractor: (item: T, index: number) => string
   className?: string
 }
 
@@ -60,6 +61,7 @@ export function ModernTable<T>({
   sortColumn,
   sortDirection,
   onSort,
+  onRowClick,
   keyExtractor,
   className,
 }: ModernTableProps<T>) {
@@ -142,10 +144,14 @@ export function ModernTable<T>({
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {data.map((item) => (
+            {data.map((item, index) => (
               <tr
-                key={keyExtractor(item)}
-                className="hover:bg-muted/30 transition-colors"
+                key={keyExtractor(item, index)}
+                className={cn(
+                  "hover:bg-muted/30 transition-colors",
+                  onRowClick && "cursor-pointer"
+                )}
+                onClick={() => onRowClick?.(item)}
               >
                 {columns.map((col) => (
                   <td key={col.key} className={cn("px-4 py-4 text-sm", col.className)}>

@@ -89,7 +89,9 @@ export async function getDirectorioRRHH(
   )
 }
 
-export async function registrarClienteCompleto(params: {
+export async function registrarClienteCompleto(
+  idActor: number,
+  params: {
   nombre: string
   apellido: string
   ci: string
@@ -100,6 +102,8 @@ export async function registrarClienteCompleto(params: {
   idSede: number
 }): Promise<void> {
   const { getDbPool, sql } = await import("@/lib/db")
+  const { setDbSessionContext } = await import("@/lib/db/session-context")
+  await setDbSessionContext(idActor)
   const pool = await getDbPool()
   await pool
     .request()
@@ -131,4 +135,98 @@ export async function modificarCliente(params: {
     .input("Direccion", sql.NVarChar(sql.MAX), params.direccion ?? null)
     .input("Nit", sql.NVarChar(50), params.nit ?? null)
     .execute("Persona.sp_Modificar_Cliente")
+}
+
+/** Mismos datos personales que cliente + campos laborales → sp_Contratar_Personal_Completo */
+export async function contratarPersonalCompleto(
+  idActor: number,
+  params: {
+  nombre: string
+  apellido: string
+  ci: string
+  telefono: string
+  email: string
+  direccion: string
+  fechaContratacion: string
+  salario: number
+  idSede: number
+}): Promise<number> {
+  const { getDbPool, sql } = await import("@/lib/db")
+  const { setDbSessionContext } = await import("@/lib/db/session-context")
+  await setDbSessionContext(idActor)
+  const pool = await getDbPool()
+  await pool
+    .request()
+    .input("Nombre", sql.NVarChar(100), params.nombre)
+    .input("Apellido", sql.NVarChar(100), params.apellido)
+    .input("CI", sql.NVarChar(50), params.ci)
+    .input("Telefono", sql.NVarChar(50), params.telefono)
+    .input("Email", sql.NVarChar(100), params.email)
+    .input("Direccion", sql.NVarChar(sql.MAX), params.direccion)
+    .input("Fecha_contratacion", sql.Date, params.fechaContratacion)
+    .input("Salario", sql.Decimal(10, 2), params.salario)
+    .input("id_sede", sql.Int, params.idSede)
+    .execute("Persona.sp_Contratar_Personal_Completo")
+
+  const row = await queryOne<{ id_empleado: number }>(
+    `SELECT e.id_empleado
+     FROM Persona.Empleado e
+     INNER JOIN Persona.Persona p ON e.id_persona = p.id_persona
+     WHERE p.CI = @ci AND p.id_sede = @id_sede`,
+    { ci: params.ci, id_sede: params.idSede }
+  )
+  if (!row?.id_empleado) {
+    throw new Error("Empleado contratado pero no se pudo obtener id_empleado")
+  }
+  return row.id_empleado
+}
+
+export async function getEmpleadoDetalle(
+  idEmpleado: number,
+  idSede?: number
+): Promise<Record<string, unknown> | null> {
+  let sqlText = `SELECT
+      e.id_empleado,
+      p.id_persona,
+      p.id_sede,
+      p.Nombre,
+      p.Apellido,
+      CONCAT(p.Nombre, ' ', p.Apellido) AS Nombre_completo,
+      p.CI,
+      p.Telefono,
+      p.Email,
+      p.Direccion,
+      e.Fecha_contratacion,
+      e.Salario_base
+    FROM Persona.Empleado e
+    INNER JOIN Persona.Persona p ON e.id_persona = p.id_persona
+    WHERE e.id_empleado = @id_empleado`
+  const params: Record<string, unknown> = { id_empleado: idEmpleado }
+  if (idSede != null) {
+    sqlText += ` AND p.id_sede = @id_sede`
+    params.id_sede = idSede
+  }
+  return queryOne(sqlText, params)
+}
+
+export async function actualizarPerfilLaboral(params: {
+  idEmpleado: number
+  salario: number
+}): Promise<void> {
+  const { getDbPool, sql } = await import("@/lib/db")
+  const pool = await getDbPool()
+  await pool
+    .request()
+    .input("id_empleado", sql.Int, params.idEmpleado)
+    .input("Salario", sql.Decimal(10, 2), params.salario)
+    .execute("Persona.sp_Actualizar_Perfil_Laboral")
+}
+
+export async function desactivarEmpleado(idEmpleado: number): Promise<void> {
+  const { getDbPool, sql } = await import("@/lib/db")
+  const pool = await getDbPool()
+  await pool
+    .request()
+    .input("id_empleado", sql.Int, idEmpleado)
+    .execute("Persona.sp_Desactivar_Empleado")
 }
